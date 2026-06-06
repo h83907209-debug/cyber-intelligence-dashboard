@@ -307,7 +307,7 @@ function startOverlay() {
 
 function holdOverlayForThreeSeconds() {
   return new Promise((resolve) => {
-    setTimeout(resolve, 3000);
+    setTimeout(resolve, 9000);
   });
 }
 
