@@ -7,13 +7,19 @@ const logoutBtn = document.getElementById("logoutBtn");
 const scanForm = document.getElementById("scanForm");
 const scanTarget = document.getElementById("scanTarget");
 const resultBox = document.getElementById("resultBox");
+const resultStatus = document.getElementById("resultStatus");
+const locationStatus = document.getElementById("locationStatus");
+const intelCards = document.getElementById("intelCards");
 
 const API_BASE = "/api";
+const IS_MOBILE = window.matchMedia("(max-width: 767px)").matches;
+
 let authToken = sessionStorage.getItem("auth_token") || "";
 let mapState = null;
 let globeState = null;
 let engineBootPromise = null;
 let typingTimer = null;
+const geocodeCache = new Map();
 
 const heroTitle = document.querySelector("h1");
 if (heroTitle) {
@@ -24,10 +30,12 @@ function loadScript(src) {
   return new Promise((resolve, reject) => {
     const existing = document.querySelector(`script[src="${src}"]`);
     if (existing) {
-      existing.addEventListener("load", () => resolve());
-      if (existing.getAttribute("data-loaded") === "true") {
+      if (existing.dataset.loaded === "true") {
         resolve();
+        return;
       }
+      existing.addEventListener("load", () => resolve(), { once: true });
+      existing.addEventListener("error", () => reject(new Error(`Failed to load ${src}`)), { once: true });
       return;
     }
 
@@ -35,10 +43,10 @@ function loadScript(src) {
     script.src = src;
     script.async = true;
     script.onload = () => {
-      script.setAttribute("data-loaded", "true");
+      script.dataset.loaded = "true";
       resolve();
     };
-    script.onerror = () => reject(new Error(`Failed to load script: ${src}`));
+    script.onerror = () => reject(new Error(`Failed to load ${src}`));
     document.head.appendChild(script);
   });
 }
@@ -51,6 +59,313 @@ function loadCss(href) {
   link.rel = "stylesheet";
   link.href = href;
   document.head.appendChild(link);
+}
+
+function parseErrorMessage(payload, fallback) {
+  if (!payload || typeof payload !== "object") {
+    return fallback;
+  }
+  if (typeof payload.error === "string" && payload.error.trim()) {
+    return payload.error;
+  }
+  if (typeof payload.message === "string" && payload.message.trim()) {
+    return payload.message;
+  }
+  return fallback;
+}
+
+function startDotsLoading(targetElement, baseText) {
+  let tick = 0;
+  targetElement.textContent = `${baseText}.`;
+
+  const intervalId = setInterval(() => {
+    tick = (tick + 1) % 3;
+    targetElement.textContent = `${baseText}${".".repeat(tick + 1)}`;
+  }, 300);
+
+  return () => clearInterval(intervalId);
+}
+
+function typeInto(element, text, speed = 12) {
+  if (typingTimer) {
+    clearTimeout(typingTimer);
+    typingTimer = null;
+  }
+
+  element.classList.add("typing");
+  element.textContent = "";
+  let index = 0;
+
+  const write = () => {
+    index += 1;
+    element.textContent = text.slice(0, index);
+    if (index < text.length) {
+      typingTimer = setTimeout(write, speed);
+      return;
+    }
+    element.classList.remove("typing");
+  };
+
+  write();
+}
+
+function clearIntelCards() {
+  intelCards.innerHTML = "";
+}
+
+function normalizeKey(input) {
+  return String(input).toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function collectEntries(node, path = "", entries = []) {
+  if (node === null || node === undefined) {
+    return entries;
+  }
+
+  if (typeof node === "string" || typeof node === "number") {
+    const value = String(node).trim();
+    if (value) {
+      entries.push({ key: path, value });
+    }
+    return entries;
+  }
+
+  if (Array.isArray(node)) {
+    node.forEach((item, index) => collectEntries(item, `${path}[${index}]`, entries));
+    return entries;
+  }
+
+  if (typeof node === "object") {
+    Object.entries(node).forEach(([key, value]) => {
+      const nextPath = path ? `${path}.${key}` : key;
+      collectEntries(value, nextPath, entries);
+    });
+  }
+
+  return entries;
+}
+
+function pickField(entries, keyPatterns, options = {}) {
+  const { exclude = [], min = 2, mustContainDigit = false } = options;
+  const normalizedPatterns = keyPatterns.map(normalizeKey);
+  const normalizedExclude = exclude.map(normalizeKey);
+
+  for (const entry of entries) {
+    const key = normalizeKey(entry.key);
+    const value = entry.value;
+    if (value.length < min) {
+      continue;
+    }
+    if (mustContainDigit && !/\d/.test(value)) {
+      continue;
+    }
+    if (normalizedExclude.some((token) => key.includes(token))) {
+      continue;
+    }
+    if (normalizedPatterns.some((token) => key.includes(token))) {
+      return value;
+    }
+  }
+
+  return "";
+}
+
+function parseIntelligenceFields(payload) {
+  const entries = collectEntries(payload);
+
+  const fullName = pickField(entries, ["fullname", "name"], {
+    exclude: ["father", "mother", "username", "carrier", "operator"]
+  });
+  const fatherName = pickField(entries, ["fathername", "father"]);
+  const phone = pickField(entries, ["phone", "mobile", "contact"], { mustContainDigit: true });
+  const secondaryPhone = pickField(entries, ["secondaryphone", "alternatephone", "phone2", "mobile2"], {
+    mustContainDigit: true
+  });
+  const email = pickField(entries, ["email", "mail"]);
+  const address = pickField(entries, ["address", "street", "locality", "village"]);
+  const city = pickField(entries, ["city", "town"]);
+  const district = pickField(entries, ["district", "county"]);
+  const state = pickField(entries, ["state", "region", "province"]);
+  const documentNumber = pickField(entries, ["document", "idnumber", "passport", "pan", "aadhaar", "voter"], {
+    mustContainDigit: true
+  });
+  const carrier = pickField(entries, ["carrier", "operator", "network", "telecom", "provider"]);
+
+  const cards = [
+    { label: "Name", value: fullName },
+    { label: "Father Name", value: fatherName },
+    { label: "Phone", value: phone },
+    { label: "Secondary Phone", value: secondaryPhone && secondaryPhone !== phone ? secondaryPhone : "" },
+    { label: "Email", value: email },
+    { label: "Address", value: address },
+    { label: "Region", value: state },
+    { label: "Document Number", value: documentNumber },
+    { label: "Carrier", value: carrier }
+  ].filter((item) => item.value);
+
+  return {
+    cards,
+    address,
+    city,
+    district,
+    state
+  };
+}
+
+function renderIntelligenceCards(cards) {
+  clearIntelCards();
+
+  if (!cards.length) {
+    const empty = document.createElement("div");
+    empty.className = "intel-empty";
+    empty.textContent = "No intelligence fields available in current response.";
+    intelCards.appendChild(empty);
+    return;
+  }
+
+  cards.forEach((item) => {
+    const card = document.createElement("article");
+    card.className = "intel-card";
+
+    const label = document.createElement("span");
+    label.className = "intel-label";
+    label.textContent = item.label;
+
+    const value = document.createElement("p");
+    value.className = "intel-value";
+    value.textContent = item.value;
+
+    card.appendChild(label);
+    card.appendChild(value);
+    intelCards.appendChild(card);
+  });
+}
+
+function findLatLng(node) {
+  if (!node || typeof node !== "object") {
+    return null;
+  }
+
+  if (Array.isArray(node)) {
+    for (const entry of node) {
+      const found = findLatLng(entry);
+      if (found) {
+        return found;
+      }
+    }
+    return null;
+  }
+
+  const keys = Object.keys(node);
+  const latKey = keys.find((key) => ["lat", "latitude", "geo_lat"].includes(String(key).toLowerCase()));
+  const lngKey = keys.find((key) => ["lng", "lon", "long", "longitude", "geo_lon"].includes(String(key).toLowerCase()));
+
+  if (latKey && lngKey) {
+    const lat = Number(node[latKey]);
+    const lng = Number(node[lngKey]);
+    if (Number.isFinite(lat) && Number.isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+      return { lat, lng };
+    }
+  }
+
+  for (const value of Object.values(node)) {
+    const found = findLatLng(value);
+    if (found) {
+      return found;
+    }
+  }
+
+  return null;
+}
+
+async function geocodeQuery(query) {
+  if (!query) {
+    return null;
+  }
+
+  const cacheKey = query.toLowerCase();
+  if (geocodeCache.has(cacheKey)) {
+    return geocodeCache.get(cacheKey);
+  }
+
+  const endpoint = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query)}`;
+
+  try {
+    const response = await fetch(endpoint);
+    if (!response.ok) {
+      geocodeCache.set(cacheKey, null);
+      return null;
+    }
+    const payload = await response.json();
+    if (!Array.isArray(payload) || !payload.length) {
+      geocodeCache.set(cacheKey, null);
+      return null;
+    }
+
+    const lat = Number(payload[0].lat);
+    const lng = Number(payload[0].lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      geocodeCache.set(cacheKey, null);
+      return null;
+    }
+
+    const point = { lat, lng, label: payload[0].display_name || query };
+    geocodeCache.set(cacheKey, point);
+    return point;
+  } catch {
+    return null;
+  }
+}
+
+async function resolveLocation(payload, extracted) {
+  const exact = findLatLng(payload);
+  if (exact) {
+    return { ...exact, source: "coordinates" };
+  }
+
+  const locationParts = {
+    address: extracted.address,
+    city: extracted.city,
+    district: extracted.district,
+    state: extracted.state
+  };
+
+  const queries = [];
+
+  const full = [locationParts.address, locationParts.city, locationParts.district, locationParts.state]
+    .filter(Boolean)
+    .join(", ");
+  if (full) {
+    queries.push(full);
+  }
+
+  const locality = [locationParts.city, locationParts.district, locationParts.state].filter(Boolean).join(", ");
+  if (locality) {
+    queries.push(locality);
+  }
+
+  const districtState = [locationParts.district, locationParts.state].filter(Boolean).join(", ");
+  if (districtState) {
+    queries.push(districtState);
+  }
+
+  const cityState = [locationParts.city, locationParts.state].filter(Boolean).join(", ");
+  if (cityState) {
+    queries.push(cityState);
+  }
+
+  if (locationParts.state) {
+    queries.push(locationParts.state);
+  }
+
+  for (const query of queries) {
+    const result = await geocodeQuery(query);
+    if (result) {
+      return { lat: result.lat, lng: result.lng, source: "geocoding", label: result.label };
+    }
+  }
+
+  return null;
 }
 
 async function ensureVisualEngines() {
@@ -95,14 +410,37 @@ async function ensureVisualEngines() {
       document.head.appendChild(style);
     }
 
-    initGlobe();
+    await initGlobe();
     initMap();
   })();
 
   return engineBootPromise;
 }
 
-function initGlobe() {
+function earthTextureSources() {
+  const customTexture = window.CUSTOM_EARTH_TEXTURE_URL || document.body.dataset.earthTexture || "";
+  const customMobileTexture = document.body.dataset.earthTextureMobile || "";
+  return {
+    day: IS_MOBILE && customMobileTexture ? customMobileTexture : customTexture,
+    fallbackDay: "https://cdn.jsdelivr.net/gh/mrdoob/three.js@r160/examples/textures/planets/earth_atmos_2048.jpg",
+    night: "https://cdn.jsdelivr.net/gh/mrdoob/three.js@r160/examples/textures/planets/earth_lights_2048.png",
+    clouds: "https://cdn.jsdelivr.net/gh/mrdoob/three.js@r160/examples/textures/planets/earth_clouds_1024.png",
+    normal: "https://cdn.jsdelivr.net/gh/mrdoob/three.js@r160/examples/textures/planets/earth_normal_2048.jpg"
+  };
+}
+
+async function loadTextureWithFallback(loader, primary, fallback) {
+  if (primary) {
+    try {
+      return await loader.loadAsync(primary);
+    } catch {
+      // Fallback keeps globe rendering when custom texture is missing.
+    }
+  }
+  return loader.loadAsync(fallback);
+}
+
+async function initGlobe() {
   if (globeState) {
     return;
   }
@@ -115,7 +453,7 @@ function initGlobe() {
   globeElement.innerHTML = "";
   globeElement.style.width = "100%";
   globeElement.style.height = "100%";
-  globeElement.style.minHeight = "240px";
+  globeElement.style.minHeight = IS_MOBILE ? "300px" : "360px";
   globeElement.style.border = "0";
   globeElement.style.background = "transparent";
   globeElement.style.boxShadow = "none";
@@ -123,45 +461,83 @@ function initGlobe() {
 
   const THREE = window.THREE;
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(60, globeElement.clientWidth / globeElement.clientHeight, 0.1, 1000);
-  camera.position.z = 3;
+  const camera = new THREE.PerspectiveCamera(50, globeElement.clientWidth / globeElement.clientHeight, 0.1, 1000);
+  camera.position.z = 2.8;
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  const renderer = new THREE.WebGLRenderer({ antialias: !IS_MOBILE, alpha: true, powerPreference: "high-performance" });
   renderer.setSize(globeElement.clientWidth, globeElement.clientHeight);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setPixelRatio(IS_MOBILE ? 1 : Math.min(window.devicePixelRatio || 1, 2));
   globeElement.appendChild(renderer.domElement);
 
-  const sphere = new THREE.Mesh(
-    new THREE.SphereGeometry(1, 48, 48),
-    new THREE.MeshStandardMaterial({
-      color: 0x2dd4ff,
-      emissive: 0x1a2d77,
+  const loader = new THREE.TextureLoader();
+  const textures = earthTextureSources();
+
+  const [dayMap, nightMap, cloudMap, normalMap] = await Promise.all([
+    loadTextureWithFallback(loader, textures.day, textures.fallbackDay),
+    loader.loadAsync(textures.night),
+    loader.loadAsync(textures.clouds),
+    loader.loadAsync(textures.normal)
+  ]);
+
+  [dayMap, nightMap, cloudMap, normalMap].forEach((texture) => {
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.anisotropy = IS_MOBILE ? 2 : 8;
+  });
+
+  const segments = IS_MOBILE ? 48 : 96;
+
+  const earth = new THREE.Mesh(
+    new THREE.SphereGeometry(1, segments, segments),
+    new THREE.MeshPhongMaterial({
+      map: dayMap,
+      normalMap,
+      emissiveMap: nightMap,
+      emissive: new THREE.Color(0x6a89ff),
       emissiveIntensity: 0.35,
-      wireframe: true,
-      metalness: 0.15,
-      roughness: 0.45
+      shininess: 10
+    })
+  );
+
+  const clouds = new THREE.Mesh(
+    new THREE.SphereGeometry(1.01, segments, segments),
+    new THREE.MeshLambertMaterial({
+      map: cloudMap,
+      transparent: true,
+      opacity: IS_MOBILE ? 0.28 : 0.38,
+      depthWrite: false
     })
   );
 
   const atmosphere = new THREE.Mesh(
-    new THREE.SphereGeometry(1.07, 48, 48),
-    new THREE.MeshBasicMaterial({ color: 0x4bf7ff, transparent: true, opacity: 0.08 })
+    new THREE.SphereGeometry(1.08, segments, segments),
+    new THREE.MeshBasicMaterial({
+      color: 0x4bdfff,
+      transparent: true,
+      opacity: IS_MOBILE ? 0.12 : 0.18,
+      side: THREE.BackSide
+    })
   );
 
-  scene.add(sphere);
+  scene.add(earth);
+  scene.add(clouds);
   scene.add(atmosphere);
-  scene.add(new THREE.AmbientLight(0x1d4ed8, 0.8));
 
-  const light = new THREE.PointLight(0x4bf7ff, 1.1);
-  light.position.set(2.5, 2.2, 2.8);
-  scene.add(light);
+  scene.add(new THREE.AmbientLight(0x2f4e8f, 0.65));
+
+  const sun = new THREE.DirectionalLight(0xffffff, 1.2);
+  sun.position.set(5, 1.5, 5);
+  scene.add(sun);
+
+  const rim = new THREE.DirectionalLight(0x4bf7ff, 0.25);
+  rim.position.set(-5, -2, -4);
+  scene.add(rim);
 
   let frameId = 0;
   const animate = () => {
     frameId = requestAnimationFrame(animate);
-    sphere.rotation.y += 0.006;
-    sphere.rotation.x += 0.0014;
-    atmosphere.rotation.y -= 0.002;
+    earth.rotation.y += 0.0014;
+    clouds.rotation.y += 0.0018;
+    atmosphere.rotation.y += 0.0007;
     renderer.render(scene, camera);
   };
   animate();
@@ -189,37 +565,40 @@ function initMap() {
   }
 
   mapWrap.innerHTML = '<div id="liveMap" style="height:100%;width:100%;"></div>';
-  const L = window.L;
 
+  const L = window.L;
   const map = L.map("liveMap", {
     zoomControl: true,
-    attributionControl: true
-  }).setView([20, 0], 2);
+    attributionControl: true,
+    preferCanvas: true,
+    zoomAnimation: true,
+    fadeAnimation: !IS_MOBILE,
+    markerZoomAnimation: true
+  });
 
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    attribution: "&copy; OpenStreetMap contributors"
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+    attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+    maxZoom: 19
   }).addTo(map);
 
-  const marker = L.marker([20, 0], {
-    icon: L.divIcon({
-      className: "",
-      html: '<div class="pulse-marker"></div>',
-      iconSize: [20, 20],
-      iconAnchor: [10, 10]
-    })
-  }).addTo(map);
+  map.fitWorld({ animate: false });
 
-  const circle = L.circle([20, 0], {
-    radius: 180000,
-    color: "#4bf7ff",
-    weight: 1,
-    fillColor: "#ff46e8",
-    fillOpacity: 0.2
-  }).addTo(map);
+  mapState = { map, marker: null, circle: null, visible: false };
+  setTimeout(() => map.invalidateSize(), 180);
+}
 
-  mapState = { map, marker, circle };
+function showLocationUnavailable() {
+  locationStatus.textContent = "Location unavailable";
+  locationStatus.classList.add("unavailable");
 
-  setTimeout(() => map.invalidateSize(), 200);
+  if (!mapState) {
+    return;
+  }
+  if (mapState.visible && mapState.marker && mapState.circle) {
+    mapState.map.removeLayer(mapState.marker);
+    mapState.map.removeLayer(mapState.circle);
+    mapState.visible = false;
+  }
 }
 
 function updateLiveLocation(lat, lng, labelText) {
@@ -228,61 +607,38 @@ function updateLiveLocation(lat, lng, labelText) {
   }
 
   const location = [lat, lng];
+  if (!mapState.marker || !mapState.circle) {
+    const L = window.L;
+    mapState.marker = L.marker(location, {
+      icon: L.divIcon({
+        className: "",
+        html: '<div class="pulse-marker"></div>',
+        iconSize: [20, 20],
+        iconAnchor: [10, 10]
+      })
+    });
+
+    mapState.circle = L.circle(location, {
+      radius: 140000,
+      color: "#4bf7ff",
+      weight: 1,
+      fillColor: "#ff46e8",
+      fillOpacity: 0.18
+    });
+  }
+
+  if (!mapState.visible) {
+    mapState.marker.addTo(mapState.map);
+    mapState.circle.addTo(mapState.map);
+    mapState.visible = true;
+  }
+
   mapState.marker.setLatLng(location).bindPopup(labelText);
   mapState.circle.setLatLng(location);
-  mapState.map.flyTo(location, 6, { duration: 1.8, easeLinearity: 0.3 });
-}
-
-function parseErrorMessage(payload, fallback) {
-  if (!payload || typeof payload !== "object") {
-    return fallback;
-  }
-  if (typeof payload.error === "string" && payload.error.trim()) {
-    return payload.error;
-  }
-  if (typeof payload.message === "string" && payload.message.trim()) {
-    return payload.message;
-  }
-  return fallback;
-}
-
-function startDotsLoading(targetElement, baseText) {
-  let tick = 0;
-  targetElement.textContent = `${baseText}.`;
-
-  const intervalId = setInterval(() => {
-    tick = (tick + 1) % 3;
-    targetElement.textContent = `${baseText}${".".repeat(tick + 1)}`;
-  }, 300);
-
-  return () => clearInterval(intervalId);
-}
-
-function renderResultText(text) {
-  typeInto(resultBox, text);
-}
-
-function typeInto(element, text, speed = 14) {
-  if (typingTimer) {
-    clearTimeout(typingTimer);
-    typingTimer = null;
-  }
-
-  element.classList.add("typing");
-  element.textContent = "";
-  let index = 0;
-
-  const write = () => {
-    index += 1;
-    element.textContent = text.slice(0, index);
-    if (index < text.length) {
-      typingTimer = setTimeout(write, speed);
-      return;
-    }
-    element.classList.remove("typing");
-  };
-
-  write();
+  mapState.map.flyTo(location, IS_MOBILE ? 6 : 7, {
+    duration: IS_MOBILE ? 1.4 : 1.8,
+    easeLinearity: 0.24
+  });
 }
 
 function unlockDashboard() {
@@ -290,7 +646,7 @@ function unlockDashboard() {
   dashboard.classList.remove("hidden");
   dashboard.setAttribute("aria-hidden", "false");
   ensureVisualEngines().catch(() => {
-    resultBox.textContent = "Error: failed to load map/globe engine.";
+    typeInto(resultStatus, "Error: visualization engine unavailable.");
   });
 }
 
@@ -362,7 +718,9 @@ logoutBtn.addEventListener("click", () => {
   document.getElementById("password").value = "";
   lockDashboard();
   loginError.textContent = "";
-  resultBox.textContent = "No scan run yet.";
+  typeInto(resultStatus, "No scan run yet.");
+  showLocationUnavailable();
+  clearIntelCards();
 });
 
 scanForm.addEventListener("submit", async (event) => {
@@ -371,12 +729,12 @@ scanForm.addEventListener("submit", async (event) => {
   const submitButton = scanForm.querySelector("button[type='submit']");
 
   if (!target) {
-    renderResultText("Error: target is required.");
+    typeInto(resultStatus, "Error: target is required.");
     return;
   }
 
   if (!authToken) {
-    renderResultText("Error: session expired. Please login again.");
+    typeInto(resultStatus, "Error: session expired. Please login again.");
     lockDashboard();
     return;
   }
@@ -384,7 +742,7 @@ scanForm.addEventListener("submit", async (event) => {
   submitButton.disabled = true;
   submitButton.classList.add("loading");
   resultBox.classList.add("scanning");
-  const stopLoading = startDotsLoading(resultBox, "Scanning target");
+  const stopLoading = startDotsLoading(resultStatus, "Scanning target");
 
   const finishLoading = () => {
     stopLoading();
@@ -418,41 +776,32 @@ scanForm.addEventListener("submit", async (event) => {
     if (response.status === 401) {
       finishLoading();
       lockDashboard();
-      renderResultText("Error: unauthorized. Please login again.");
+      typeInto(resultStatus, "Error: unauthorized. Please login again.");
       return;
     }
 
     if (!response.ok) {
       finishLoading();
-      renderResultText(`Error: ${parseErrorMessage(payload, "Query failed.")}`);
+      typeInto(resultStatus, `Error: ${parseErrorMessage(payload, "Query failed.")}`);
       return;
     }
 
-    const resultCount = Number(payload?.resultCount ?? 0);
-    const items = Array.isArray(payload?.items) ? payload.items : [];
-    const lat = Number(payload?.location?.lat);
-    const lng = Number(payload?.location?.lng);
+    const parsed = parseIntelligenceFields(payload);
+    renderIntelligenceCards(parsed.cards);
 
-    if (Number.isFinite(lat) && Number.isFinite(lng)) {
-      updateLiveLocation(lat, lng, `Target: ${target}`);
+    const location = await resolveLocation(payload, parsed);
+    if (location) {
+      locationStatus.textContent = `Location locked: ${location.lat.toFixed(5)}, ${location.lng.toFixed(5)}`;
+      locationStatus.classList.remove("unavailable");
+      updateLiveLocation(location.lat, location.lng, `Target: ${target}`);
+    } else {
+      showLocationUnavailable();
     }
 
-    const preview = items.slice(0, 3).map((item, index) => `${index + 1}. ${JSON.stringify(item)}`);
-
     finishLoading();
-    renderResultText([
-      `Target: ${target}`,
-      `Provider: ${payload?.provider || "LeakOSINT"}`,
-      `Results: ${resultCount}`,
-      Number.isFinite(lat) && Number.isFinite(lng) ? `Location: ${lat.toFixed(4)}, ${lng.toFixed(4)}` : "Location: not available",
-      "",
-      preview.length ? "Top Matches:" : "No matches returned.",
-      ...preview,
-      "",
-      `Timestamp: ${new Date().toLocaleString()}`
-    ].join("\n"));
+    typeInto(resultStatus, `Intelligence report generated for target: ${target}`);
   } catch {
     finishLoading();
-    renderResultText("Error: unable to connect to backend.");
+    typeInto(resultStatus, "Error: unable to connect to backend.");
   }
 });
