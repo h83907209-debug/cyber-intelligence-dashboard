@@ -1,16 +1,17 @@
+<!-- index.html -->
 <!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Pika Intel Lookup</title>
+    <title>Pikachu Lookup</title>
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
     <main class="app">
       <section id="loginView" class="screen">
         <div class="card login-card">
-          <img class="pikachu login-art" src="assets/pikachu-login.png" alt="Pikachu illustration" />
+          <img id="loginPikachu" class="pikachu login-art" src="" alt="Pikachu illustration" />
           <p class="kicker">Secure Access</p>
           <h1>Pika Intel Lookup</h1>
           <p class="muted">Login to access intelligence search.</p>
@@ -31,7 +32,7 @@
       <section id="searchView" class="screen hidden" aria-hidden="true">
         <header class="header">
           <div class="brand">
-            <img class="pikachu brand-art" src="assets/pikachu-brand.png" alt="Pikachu icon" />
+            <img id="brandPikachu" class="pikachu brand-art" src="" alt="Pikachu icon" />
             <div>
               <p class="kicker">Intelligence Lookup</p>
               <h2>Phone Search</h2>
@@ -63,7 +64,10 @@
         </section>
 
         <section class="card result-card">
-          <h3>Results</h3>
+          <div class="results-head">
+            <h3>Results</h3>
+            <img id="resultsPikachu" class="pikachu tiny-art" src="" alt="Pikachu decorative" />
+          </div>
           <div id="resultCards" class="result-grid"></div>
         </section>
       </section>
@@ -73,8 +77,8 @@
       <div class="overlay-content">
         <div class="runner-track" aria-hidden="true">
           <div class="runner">
-            <img src="assets/pikachu-run-1.png" alt="" class="frame frame-a" />
-            <img src="assets/pikachu-run-2.png" alt="" class="frame frame-b" />
+            <img id="runFrameA" src="" alt="" class="frame frame-a" />
+            <img id="runFrameB" src="" alt="" class="frame frame-b" />
           </div>
         </div>
         <p id="scanMessage" class="overlay-text">Initializing Search...</p>
