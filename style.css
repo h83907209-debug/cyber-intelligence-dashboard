@@ -1,4 +1,3 @@
-/* style.css */
 :root {
   --bg: #101317;
   --surface: #191e27;
@@ -45,10 +44,11 @@ body {
   margin: 11vh auto 0;
 }
 
-.pikachu {
-  display: block;
-  width: 74px;
-  height: 74px;
+.login-pikachu{
+    width:280px;
+    max-width:90%;
+    display:block;
+    margin:0 auto 20px;
   object-fit: contain;
 }
 
