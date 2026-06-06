@@ -338,3 +338,10 @@ button:disabled {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+.pikachu-gif{
+  width:320px;
+  max-width:90vw;
+  display:block;
+  margin:auto;
+  object-fit:contain;
+}
