@@ -1,34 +1,47 @@
+const API_BASE = "/api";
 const loginView = document.getElementById("loginView");
 const searchView = document.getElementById("searchView");
 const loginForm = document.getElementById("loginForm");
-const loginError = document.getElementById("loginError");
 const logoutBtn = document.getElementById("logoutBtn");
+const loginError = document.getElementById("loginError");
 
 const searchForm = document.getElementById("searchForm");
 const searchInput = document.getElementById("searchInput");
+const countryCode = document.getElementById("countryCode");
 const searchError = document.getElementById("searchError");
 const resultCards = document.getElementById("resultCards");
 
 const scanOverlay = document.getElementById("scanOverlay");
 const scanMessage = document.getElementById("scanMessage");
 
-const API_BASE = "/api";
-let authToken = sessionStorage.getItem("auth_token") || "";
-
-const SEARCH_STEPS = [
-  "Initializing search...",
-  "Checking records...",
-  "Processing intelligence...",
-  "Building report..."
+const scanSteps = [
+  "Initializing Search...",
+  "Checking Records...",
+  "Processing Intelligence...",
+  "Building Report..."
 ];
 
-function setAuthenticatedState(isAuthenticated) {
-  loginView.classList.toggle("hidden", isAuthenticated);
-  searchView.classList.toggle("hidden", !isAuthenticated);
-  searchView.setAttribute("aria-hidden", String(!isAuthenticated));
+let authToken = sessionStorage.getItem("auth_token") || "";
+
+function setView(isLoggedIn) {
+  loginView.classList.toggle("hidden", isLoggedIn);
+  searchView.classList.toggle("hidden", !isLoggedIn);
+  searchView.setAttribute("aria-hidden", String(!isLoggedIn));
 }
 
-function parseErrorMessage(payload, fallback) {
+function clearResults() {
+  resultCards.innerHTML = "";
+}
+
+function showEmpty(message) {
+  clearResults();
+  const block = document.createElement("div");
+  block.className = "empty";
+  block.textContent = message;
+  resultCards.appendChild(block);
+}
+
+function parseError(payload, fallback) {
   if (!payload || typeof payload !== "object") {
     return fallback;
   }
@@ -41,20 +54,8 @@ function parseErrorMessage(payload, fallback) {
   return fallback;
 }
 
-function clearResults() {
-  resultCards.innerHTML = "";
-}
-
-function showEmptyState(message) {
-  clearResults();
-  const block = document.createElement("div");
-  block.className = "empty-state";
-  block.textContent = message;
-  resultCards.appendChild(block);
-}
-
-function normalizeKey(input) {
-  return String(input).toLowerCase().replace(/[^a-z0-9]/g, "");
+function normalizeKey(value) {
+  return String(value).toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
 function collectEntries(node, path = "", entries = []) {
@@ -63,9 +64,9 @@ function collectEntries(node, path = "", entries = []) {
   }
 
   if (typeof node === "string" || typeof node === "number") {
-    const value = String(node).trim();
-    if (value) {
-      entries.push({ key: path, value });
+    const text = String(node).trim();
+    if (text) {
+      entries.push({ key: path, value: text });
     }
     return entries;
   }
@@ -77,33 +78,33 @@ function collectEntries(node, path = "", entries = []) {
 
   if (typeof node === "object") {
     Object.entries(node).forEach(([key, value]) => {
-      const nextPath = path ? `${path}.${key}` : key;
-      collectEntries(value, nextPath, entries);
+      const next = path ? `${path}.${key}` : key;
+      collectEntries(value, next, entries);
     });
   }
 
   return entries;
 }
 
-function pickField(entries, keyPatterns, options = {}) {
-  const { exclude = [], min = 2, mustContainDigit = false } = options;
-  const patterns = keyPatterns.map(normalizeKey);
-  const excluded = exclude.map(normalizeKey);
+function pickValue(entries, patterns, options = {}) {
+  const { exclude = [], requireDigit = false } = options;
+  const normalizedPatterns = patterns.map(normalizeKey);
+  const normalizedExclude = exclude.map(normalizeKey);
 
   for (const entry of entries) {
     const key = normalizeKey(entry.key);
     const value = entry.value;
 
-    if (value.length < min) {
+    if (value.length < 2) {
       continue;
     }
-    if (mustContainDigit && !/\d/.test(value)) {
+    if (requireDigit && !/\d/.test(value)) {
       continue;
     }
-    if (excluded.some((token) => key.includes(token))) {
+    if (normalizedExclude.some((token) => key.includes(token))) {
       continue;
     }
-    if (patterns.some((token) => key.includes(token))) {
+    if (normalizedPatterns.some((token) => key.includes(token))) {
       return value;
     }
   }
@@ -111,71 +112,126 @@ function pickField(entries, keyPatterns, options = {}) {
   return "";
 }
 
+function pickMultipleNames(entries) {
+  const nameTokens = ["fullname", "name", "customername", "personname"];
+  const excluded = ["father", "mother", "username", "carrier", "operator", "email"];
+  const found = [];
+
+  entries.forEach((entry) => {
+    const key = normalizeKey(entry.key);
+    const value = entry.value;
+    if (value.length < 2) {
+      return;
+    }
+    if (excluded.some((token) => key.includes(token))) {
+      return;
+    }
+    if (nameTokens.some((token) => key.includes(token)) && !found.includes(value)) {
+      found.push(value);
+    }
+  });
+
+  return found;
+}
+
+function normalizePhone(raw) {
+  const cleaned = raw.replace(/[^\d+]/g, "");
+  if (cleaned.length <= 5) {
+    return raw;
+  }
+  return cleaned;
+}
+
 function buildReport(payload) {
   const entries = collectEntries(payload);
+  const names = pickMultipleNames(entries);
 
-  return [
-    {
-      label: "Full Name",
-      value: pickField(entries, ["fullname", "name"], {
-        exclude: ["father", "mother", "username", "carrier", "operator"]
-      })
-    },
-    { label: "Phone Number", value: pickField(entries, ["phone", "mobile", "contact"], { mustContainDigit: true }) },
-    {
-      label: "Secondary Phone",
-      value: pickField(entries, ["secondaryphone", "alternatephone", "phone2", "mobile2"], { mustContainDigit: true })
-    },
-    { label: "Email", value: pickField(entries, ["email", "mail"]) },
-    { label: "Father Name", value: pickField(entries, ["fathername", "father"]) },
-    { label: "Address", value: pickField(entries, ["address", "street", "locality", "village"]) },
-    { label: "State / Region", value: pickField(entries, ["state", "region", "province"]) },
-    {
-      label: "Document Number",
-      value: pickField(entries, ["document", "idnumber", "passport", "pan", "aadhaar", "voter"], {
-        mustContainDigit: true
-      })
-    },
-    { label: "Carrier / Operator", value: pickField(entries, ["carrier", "operator", "network", "telecom", "provider"]) }
-  ].filter((item) => item.value);
+  const cards = [];
+
+  names.forEach((name, index) => {
+    cards.push({
+      label: index === 0 ? "Name" : `Name ${index + 1}`,
+      value: name
+    });
+  });
+
+  const name2FromFather = pickValue(entries, ["fathername", "father"]);
+  if (name2FromFather && !names.includes(name2FromFather)) {
+    cards.push({ label: "Name 2", value: name2FromFather });
+  }
+
+  const primaryPhone = pickValue(entries, ["phone", "mobile", "contact"], { requireDigit: true });
+  const secondaryPhone = pickValue(entries, ["secondaryphone", "alternatephone", "phone2", "mobile2"], {
+    requireDigit: true
+  });
+
+  if (primaryPhone) {
+    cards.push({ label: "Phone Number", value: normalizePhone(primaryPhone) });
+  }
+  if (secondaryPhone && normalizePhone(secondaryPhone) !== normalizePhone(primaryPhone || "")) {
+    cards.push({ label: "Secondary Phone", value: normalizePhone(secondaryPhone) });
+  }
+
+  const email = pickValue(entries, ["email", "mail"]);
+  if (email) {
+    cards.push({ label: "Email", value: email });
+  }
+
+  const address = pickValue(entries, ["address", "street", "locality", "village"]);
+  if (address) {
+    cards.push({ label: "Address", value: address });
+  }
+
+  const region = pickValue(entries, ["state", "region", "province"]);
+  if (region) {
+    cards.push({ label: "State / Region", value: region });
+  }
+
+  const documentNumber = pickValue(entries, ["document", "idnumber", "passport", "pan", "aadhaar", "voter"], {
+    requireDigit: true
+  });
+  if (documentNumber) {
+    cards.push({ label: "Document Number", value: documentNumber });
+  }
+
+  return cards;
 }
 
 function renderReport(cards) {
   clearResults();
 
   if (!cards.length) {
-    showEmptyState("No reportable intelligence fields were found.");
+    showEmpty("No useful fields found in this search response.");
     return;
   }
 
-  cards.forEach((item) => {
-    const article = document.createElement("article");
-    article.className = "result-card";
+  cards.forEach((card) => {
+    const item = document.createElement("article");
+    item.className = "result-item";
 
     const label = document.createElement("span");
     label.className = "result-label";
-    label.textContent = item.label;
+    label.textContent = card.label;
 
     const value = document.createElement("p");
     value.className = "result-value";
-    value.textContent = item.value;
+    value.textContent = card.value;
 
-    article.appendChild(label);
-    article.appendChild(value);
-    resultCards.appendChild(article);
+    item.appendChild(label);
+    item.appendChild(value);
+    resultCards.appendChild(item);
   });
 }
 
-function startScanOverlay() {
+function startOverlay() {
   scanOverlay.classList.remove("hidden");
   scanOverlay.setAttribute("aria-hidden", "false");
 
   let step = 0;
-  scanMessage.textContent = SEARCH_STEPS[step];
-
+  scanMessage.textContent = scanSteps[step];
   const interval = setInterval(() => {
-    step = (step + 1) % SEARCH_STEPS.length;
-    scanMessage.textContent = SEARCH_STEPS[step];
+    step = (step + 1) % scanSteps.length;
+    scanMessage.textContent = scanSteps[step];
   }, 700);
 
   return () => {
@@ -185,13 +241,38 @@ function startScanOverlay() {
   };
 }
 
-function minimumScanDuration() {
+function holdOverlayForThreeSeconds() {
   return new Promise((resolve) => {
     setTimeout(resolve, 3000);
   });
 }
 
-async function runQuery(target) {
+async function login(username, password) {
+  const response = await fetch(`${API_BASE}/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password })
+  });
+
+  let payload = null;
+  try {
+    payload = await response.json();
+  } catch {
+    payload = null;
+  }
+
+  if (!response.ok) {
+    throw new Error(parseError(payload, "Login failed."));
+  }
+
+  if (!payload || typeof payload.token !== "string" || !payload.token) {
+    throw new Error("Invalid login response.");
+  }
+
+  return payload.token;
+}
+
+async function searchPhone(fullNumber) {
   const response = await fetch(`${API_BASE}/query`, {
     method: "POST",
     headers: {
@@ -199,7 +280,7 @@ async function runQuery(target) {
       Authorization: `Bearer ${authToken}`
     },
     body: JSON.stringify({
-      request: target,
+      request: fullNumber,
       limit: 100,
       lang: "en",
       type: "json"
@@ -216,70 +297,48 @@ async function runQuery(target) {
   if (response.status === 401) {
     authToken = "";
     sessionStorage.removeItem("auth_token");
-    setAuthenticatedState(false);
+    setView(false);
     throw new Error("Session expired. Please login again.");
   }
 
   if (!response.ok) {
-    throw new Error(parseErrorMessage(payload, "Search failed."));
+    throw new Error(parseError(payload, "Search failed."));
   }
 
   return payload;
 }
 
 if (authToken) {
-  setAuthenticatedState(true);
+  setView(true);
+  showEmpty("Enter a number to begin intelligence lookup.");
 } else {
-  setAuthenticatedState(false);
+  setView(false);
 }
 
 loginForm.addEventListener("submit", async (event) => {
   event.preventDefault();
+  loginError.textContent = "";
+
   const username = document.getElementById("username").value.trim();
   const password = document.getElementById("password").value;
-  const submit = loginForm.querySelector("button[type='submit']");
+  const button = loginForm.querySelector("button[type='submit']");
 
   if (!username || !password) {
     loginError.textContent = "Username and password are required.";
     return;
   }
 
-  submit.disabled = true;
-  loginError.textContent = "";
-
+  button.disabled = true;
   try {
-    const response = await fetch(`${API_BASE}/login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password })
-    });
-
-    let payload = null;
-    try {
-      payload = await response.json();
-    } catch {
-      payload = null;
-    }
-
-    if (!response.ok) {
-      loginError.textContent = parseErrorMessage(payload, "Login failed.");
-      return;
-    }
-
-    if (!payload || typeof payload.token !== "string") {
-      loginError.textContent = "Invalid login response.";
-      return;
-    }
-
-    authToken = payload.token;
+    authToken = await login(username, password);
     sessionStorage.setItem("auth_token", authToken);
     document.getElementById("password").value = "";
-    setAuthenticatedState(true);
-    showEmptyState("Search for a number to generate an intelligence report.");
-  } catch {
-    loginError.textContent = "Unable to connect to backend.";
+    setView(true);
+    showEmpty("Enter a number to begin intelligence lookup.");
+  } catch (error) {
+    loginError.textContent = error instanceof Error ? error.message : "Login failed.";
   } finally {
-    submit.disabled = false;
+    button.disabled = false;
   }
 });
 
@@ -289,38 +348,37 @@ logoutBtn.addEventListener("click", () => {
   searchInput.value = "";
   searchError.textContent = "";
   clearResults();
-  setAuthenticatedState(false);
+  setView(false);
 });
 
 searchForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  const target = searchInput.value.trim();
-  const submit = searchForm.querySelector("button[type='submit']");
+  searchError.textContent = "";
+  clearResults();
 
-  if (!target) {
-    searchError.textContent = "Phone number is required.";
+  const selectedCode = countryCode.value;
+  const numberOnly = searchInput.value.replace(/[^\d]/g, "");
+  const button = searchForm.querySelector("button[type='submit']");
+
+  if (!numberOnly) {
+    searchError.textContent = "Please enter a valid phone number.";
     return;
   }
 
-  searchError.textContent = "";
-  clearResults();
-  submit.disabled = true;
+  const fullNumber = `${selectedCode}${numberOnly}`;
 
-  const stopOverlay = startScanOverlay();
+  button.disabled = true;
+  const stopOverlay = startOverlay();
 
   try {
-    const [payload] = await Promise.all([runQuery(target), minimumScanDuration()]);
-    const report = buildReport(payload);
-    renderReport(report);
+    const [payload] = await Promise.all([searchPhone(fullNumber), holdOverlayForThreeSeconds()]);
+    const reportCards = buildReport(payload);
+    renderReport(reportCards);
   } catch (error) {
     searchError.textContent = error instanceof Error ? error.message : "Search failed.";
-    showEmptyState("No report generated.");
+    showEmpty("No report generated.");
   } finally {
     stopOverlay();
-    submit.disabled = false;
+    button.disabled = false;
   }
 });
-
-if (authToken) {
-  showEmptyState("Search for a number to generate an intelligence report.");
-}
