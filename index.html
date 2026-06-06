@@ -6,7 +6,7 @@
     <title>Cyber Intelligence Console</title>
     <link rel="stylesheet" href="style.css" />
   </head>
-  <body>
+  <body data-earth-texture="assets/earth-day.jpg" data-earth-texture-mobile="assets/earth-day-mobile.jpg">
     <div class="noise"></div>
 
     <main class="app-shell">
@@ -72,7 +72,11 @@
 
           <section class="panel result-panel">
             <h3>Result Panel</h3>
-            <div id="resultBox" class="result-box">No scan run yet.</div>
+            <div class="result-box" id="resultBox">
+              <div id="resultStatus" class="result-status">No scan run yet.</div>
+              <p id="locationStatus" class="location-status">Location unavailable</p>
+              <div id="intelCards" class="intel-grid"></div>
+            </div>
           </section>
         </div>
       </section>
@@ -80,4 +84,4 @@
 
     <script type="module" src="./script.js"></script>
   </body>
-</html>
+          </html>
