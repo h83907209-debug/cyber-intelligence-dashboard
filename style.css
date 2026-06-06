@@ -1,3 +1,4 @@
+
 :root {
   --bg-0: #06080f;
   --bg-1: #0c1021;
@@ -273,6 +274,7 @@ h2 {
     20px 20px,
     20px 20px,
     auto;
+  min-height: 280px;
 }
 
 .map-wrap::after {
@@ -307,6 +309,64 @@ h2 {
   line-height: 1.45;
   position: relative;
   transition: border-color 260ms ease, box-shadow 260ms ease;
+}
+
+.result-status {
+  min-height: 20px;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+  font-family: "Consolas", "Courier New", monospace;
+}
+
+.location-status {
+  margin: 0 0 12px;
+  font-size: 0.84rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #7cd9ff;
+}
+
+.location-status.unavailable {
+  color: #9aaec2;
+}
+
+.intel-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.intel-card {
+  padding: 10px;
+  border: 1px solid rgba(75, 247, 255, 0.35);
+  background: linear-gradient(140deg, rgba(255, 255, 255, 0.05), rgba(24, 31, 54, 0.4));
+  backdrop-filter: blur(8px);
+  box-shadow:
+    inset 0 0 10px rgba(75, 247, 255, 0.08),
+    0 0 12px rgba(75, 247, 255, 0.12);
+}
+
+.intel-card .intel-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: #8ecde3;
+}
+
+.intel-card .intel-value {
+  margin: 0;
+  font-size: 0.92rem;
+  color: #e9f8ff;
+  word-break: break-word;
+}
+
+.intel-empty {
+  border: 1px dashed rgba(117, 147, 173, 0.5);
+  padding: 12px;
+  color: #9fb4c8;
+  font-size: 0.88rem;
 }
 
 .result-box.typing {
@@ -386,5 +446,31 @@ h2 {
 @media (max-width: 840px) {
   .grid-layout {
     grid-template-columns: 1fr;
+  }
+
+  .intel-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 767px) {
+  .globe-wrap {
+    min-height: 300px;
+    max-height: 300px;
+  }
+
+  .map-wrap {
+    min-height: 250px;
+    max-height: 250px;
+  }
+
+  .panel:hover {
+    transform: none;
+    box-shadow: none;
+  }
+
+  .login-page,
+  .dashboard {
+    box-shadow: 0 0 10px rgba(75, 247, 255, 0.15);
   }
 }
