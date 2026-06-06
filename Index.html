@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cyber Intelligence Console</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="noise"></div>
+
+    <main class="app-shell">
+      <section id="loginPage" class="login-page">
+        <p class="eyebrow">ADMIN ACCESS</p>
+        <h1>Cyber Intelligence Console</h1>
+        <p class="support">Authenticate to unlock threat monitoring controls.</p>
+
+        <form id="loginForm" class="login-form" autocomplete="off">
+          <label for="username">Username</label>
+          <input id="username" type="text" value="admin" required />
+
+          <label for="password">Password</label>
+          <input id="password" type="password" placeholder="Enter password" required />
+
+          <button type="submit">Unlock Dashboard</button>
+          <p id="loginError" class="error-text"></p>
+        </form>
+
+        <p class="hint">Use credentials: admin / 1234</p>
+      </section>
+
+      <section id="dashboard" class="dashboard hidden" aria-hidden="true">
+        <header class="dash-header">
+          <div>
+            <p class="eyebrow">CYBERPUNK OPS</p>
+            <h2>Threat Dashboard</h2>
+          </div>
+          <button id="logoutBtn" class="ghost-btn" type="button">Logout</button>
+        </header>
+
+        <div class="grid-layout">
+          <section class="panel globe-panel">
+            <h3>3D Globe Container</h3>
+            <div class="globe-wrap">
+              <div id="globe" class="globe"></div>
+            </div>
+          </section>
+
+          <section class="panel map-panel">
+            <h3>Map Container</h3>
+            <div class="map-wrap">
+              <svg class="map-grid" viewBox="0 0 640 320" role="img" aria-label="Stylized cyber map">
+                <rect x="0" y="0" width="640" height="320" fill="none" />
+                <path d="M40 90 L130 70 L210 110 L320 85 L400 120 L510 95 L590 135" />
+                <path d="M70 180 L170 200 L260 165 L360 210 L450 185 L560 220" />
+                <circle cx="130" cy="70" r="6" />
+                <circle cx="320" cy="85" r="6" />
+                <circle cx="510" cy="95" r="6" />
+                <circle cx="260" cy="165" r="6" />
+                <circle cx="450" cy="185" r="6" />
+              </svg>
+            </div>
+          </section>
+
+          <section class="panel scan-panel">
+            <h3>Scan Input Box</h3>
+            <form id="scanForm" class="scan-form">
+              <input id="scanTarget" type="text" placeholder="IP, domain, or URL" required />
+              <button type="submit">Run Scan</button>
+            </form>
+          </section>
+
+          <section class="panel result-panel">
+            <h3>Result Panel</h3>
+            <div id="resultBox" class="result-box">No scan run yet.</div>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <script src="script.js"></script>
+  </body>
+</html>
