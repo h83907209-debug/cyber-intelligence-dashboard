@@ -3,56 +3,81 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Intelligence Lookup</title>
+    <title>Pika Intel Lookup</title>
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <main class="page-shell">
-      <section id="loginView" class="panel login-panel">
-        <p class="eyebrow">Secure Access</p>
-        <h1>Intelligence Lookup</h1>
-        <p class="subtext">Sign in to search verified intelligence records.</p>
+    <main class="app">
+      <section id="loginView" class="screen">
+        <div class="card login-card">
+          <img class="pikachu login-art" src="assets/pikachu-login.png" alt="Pikachu illustration" />
+          <p class="kicker">Secure Access</p>
+          <h1>Pika Intel Lookup</h1>
+          <p class="muted">Login to access intelligence search.</p>
 
-        <form id="loginForm" class="stack" autocomplete="off">
-          <label for="username">Username</label>
-          <input id="username" type="text" required />
+          <form id="loginForm" class="form" autocomplete="off">
+            <label for="username">Username</label>
+            <input id="username" type="text" required />
 
-          <label for="password">Password</label>
-          <input id="password" type="password" required />
+            <label for="password">Password</label>
+            <input id="password" type="password" required />
 
-          <button type="submit">Login</button>
-          <p id="loginError" class="feedback"></p>
-        </form>
+            <button type="submit">Login</button>
+            <p id="loginError" class="error-text"></p>
+          </form>
+        </div>
       </section>
 
-      <section id="searchView" class="hidden" aria-hidden="true">
-        <header class="topbar">
-          <div>
-            <p class="eyebrow">Lookup Console</p>
-            <h2>Intelligence Search</h2>
+      <section id="searchView" class="screen hidden" aria-hidden="true">
+        <header class="header">
+          <div class="brand">
+            <img class="pikachu brand-art" src="assets/pikachu-brand.png" alt="Pikachu icon" />
+            <div>
+              <p class="kicker">Intelligence Lookup</p>
+              <h2>Phone Search</h2>
+            </div>
           </div>
           <button id="logoutBtn" class="secondary" type="button">Logout</button>
         </header>
 
-        <section class="panel search-panel">
-          <form id="searchForm" class="search-row">
-            <input id="searchInput" type="text" inputmode="tel" placeholder="Enter phone number" required />
-            <button type="submit">Search</button>
+        <section class="card search-card">
+          <form id="searchForm" class="search-form">
+            <label for="countryCode">Country Code</label>
+            <select id="countryCode" required>
+              <option value="+91">India (+91)</option>
+              <option value="+1">United States (+1)</option>
+              <option value="+44">United Kingdom (+44)</option>
+              <option value="+1">Canada (+1)</option>
+              <option value="+61">Australia (+61)</option>
+              <option value="+49">Germany (+49)</option>
+              <option value="+33">France (+33)</option>
+            </select>
+
+            <label for="searchInput">Phone Number</label>
+            <div class="search-row">
+              <input id="searchInput" type="tel" inputmode="numeric" placeholder="Enter phone number" required />
+              <button type="submit">Search</button>
+            </div>
+            <p id="searchError" class="error-text"></p>
           </form>
-          <p id="searchError" class="feedback"></p>
         </section>
 
-        <section class="panel result-panel">
-          <h3>Report</h3>
+        <section class="card result-card">
+          <h3>Results</h3>
           <div id="resultCards" class="result-grid"></div>
         </section>
       </section>
     </main>
 
     <div id="scanOverlay" class="overlay hidden" aria-hidden="true">
-      <div class="overlay-inner">
-        <div class="magnifier" aria-hidden="true"></div>
-        <p id="scanMessage">Initializing search...</p>
+      <div class="overlay-content">
+        <div class="runner-track" aria-hidden="true">
+          <div class="runner">
+            <img src="assets/pikachu-run-1.png" alt="" class="frame frame-a" />
+            <img src="assets/pikachu-run-2.png" alt="" class="frame frame-b" />
+          </div>
+        </div>
+        <p id="scanMessage" class="overlay-text">Initializing Search...</p>
       </div>
     </div>
 
