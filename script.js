@@ -1,4 +1,6 @@
+// script.js
 const API_BASE = "/api";
+
 const loginView = document.getElementById("loginView");
 const searchView = document.getElementById("searchView");
 const loginForm = document.getElementById("loginForm");
@@ -13,6 +15,11 @@ const resultCards = document.getElementById("resultCards");
 
 const scanOverlay = document.getElementById("scanOverlay");
 const scanMessage = document.getElementById("scanMessage");
+const loginPikachu = document.getElementById("loginPikachu");
+const brandPikachu = document.getElementById("brandPikachu");
+const resultsPikachu = document.getElementById("resultsPikachu");
+const runFrameA = document.getElementById("runFrameA");
+const runFrameB = document.getElementById("runFrameB");
 
 const scanSteps = [
   "Initializing Search...",
@@ -22,6 +29,63 @@ const scanSteps = [
 ];
 
 let authToken = sessionStorage.getItem("auth_token") || "";
+
+const svgFallbackA =
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 110 80'%3E%3Cellipse cx='56' cy='70' rx='28' ry='5' fill='%239ca3af' opacity='0.45'/%3E%3Cpath d='M18 40l16-13 12 7 9-10 9 5-4 7 12 3-10 14-17 5-13-4-8 6-1-9-10-3z' fill='%23facc15' stroke='%231f2937' stroke-width='2'/%3E%3Ccircle cx='69' cy='39' r='3' fill='%231f2937'/%3E%3Ccircle cx='63' cy='45' r='5' fill='%23ef4444'/%3E%3Cpath d='M48 30l-4-10 9 7zM56 30l3-9 6 8z' fill='%231f2937'/%3E%3C/svg%3E";
+const svgFallbackB =
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 110 80'%3E%3Cellipse cx='56' cy='70' rx='28' ry='5' fill='%239ca3af' opacity='0.45'/%3E%3Cpath d='M18 41l17-11 11 8 8-9 10 4-5 8 13 3-11 13-16 6-14-3-7 7-2-10-10-2z' fill='%23facc15' stroke='%231f2937' stroke-width='2'/%3E%3Ccircle cx='69' cy='40' r='3' fill='%231f2937'/%3E%3Ccircle cx='63' cy='46' r='5' fill='%23ef4444'/%3E%3Cpath d='M48 31l-5-9 9 6zM56 31l3-8 6 7z' fill='%231f2937'/%3E%3C/svg%3E";
+
+function probeImage(url) {
+  return new Promise((resolve) => {
+    const image = new Image();
+    image.onload = () => resolve(url);
+    image.onerror = () => resolve("");
+    image.src = url;
+  });
+}
+
+async function pickFirstAvailableImage(candidates, fallback) {
+  for (const url of candidates) {
+    const found = await probeImage(url);
+    if (found) {
+      return found;
+    }
+  }
+  return fallback;
+}
+
+async function setupPikachuImages() {
+  const loginSource = await pickFirstAvailableImage(
+    [
+      "assets/pikachu-login.png",
+      "assets/pikachu.png",
+      "assets/pikachu-hero.png",
+      "assets/pikachu.jpg"
+    ],
+    svgFallbackA
+  );
+
+  const brandSource = await pickFirstAvailableImage(
+    ["assets/pikachu-brand.png", "assets/pikachu-face.png", "assets/pikachu.png"],
+    svgFallbackA
+  );
+
+  const runSourceA = await pickFirstAvailableImage(
+    ["assets/pikachu-run-1.png", "assets/pikachu-run-a.png", "assets/pikachu-run.png", "assets/pikachu.png"],
+    svgFallbackA
+  );
+
+  const runSourceB = await pickFirstAvailableImage(
+    ["assets/pikachu-run-2.png", "assets/pikachu-run-b.png", "assets/pikachu-run.png", "assets/pikachu.png"],
+    svgFallbackB
+  );
+
+  loginPikachu.src = loginSource;
+  brandPikachu.src = brandSource;
+  resultsPikachu.src = brandSource;
+  runFrameA.src = runSourceA;
+  runFrameB.src = runSourceB;
+}
 
 function setView(isLoggedIn) {
   loginView.classList.toggle("hidden", isLoggedIn);
@@ -314,6 +378,14 @@ if (authToken) {
 } else {
   setView(false);
 }
+
+setupPikachuImages().catch(() => {
+  loginPikachu.src = svgFallbackA;
+  brandPikachu.src = svgFallbackA;
+  resultsPikachu.src = svgFallbackA;
+  runFrameA.src = svgFallbackA;
+  runFrameB.src = svgFallbackB;
+});
 
 loginForm.addEventListener("submit", async (event) => {
   event.preventDefault();
