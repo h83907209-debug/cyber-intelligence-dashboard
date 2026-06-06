@@ -1,3 +1,4 @@
+/* style.css */
 :root {
   --bg: #101317;
   --surface: #191e27;
@@ -58,6 +59,11 @@ body {
 .brand-art {
   width: 52px;
   height: 52px;
+}
+
+.tiny-art {
+  width: 34px;
+  height: 34px;
 }
 
 .kicker {
@@ -181,6 +187,13 @@ button:disabled {
   gap: 10px;
 }
 
+.results-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
 .result-item {
   border: 1px solid #38465f;
   border-radius: 12px;
@@ -241,7 +254,9 @@ button:disabled {
   position: absolute;
   left: -90px;
   bottom: 16px;
-  animation: run-across 3s linear forwards;
+  animation:
+    run-across 3s linear forwards,
+    run-bob 0.28s ease-in-out infinite;
 }
 
 .frame {
@@ -300,6 +315,16 @@ button:disabled {
   }
 }
 
+@keyframes run-bob {
+  0%,
+  100% {
+    margin-bottom: 0;
+  }
+  50% {
+    margin-bottom: 6px;
+  }
+}
+
 @media (min-width: 768px) {
   .app {
     padding: 24px;
@@ -312,4 +337,4 @@ button:disabled {
   .result-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  }
+}
